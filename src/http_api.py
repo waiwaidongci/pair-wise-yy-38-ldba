@@ -98,6 +98,28 @@ def make_handler(service: Service, static_dir: str):
                     actor, role = self._identity()
                     del actor
                     self._json(200, {"events": service.audit(role)})
+                elif path == "/api/gates":
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, {"gates": service.list_gates(role)})
+                elif path == "/api/safety-limits":
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, {"safety_limits": service.list_safety_limits(role)})
+                elif path == "/api/plans":
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, {"plans": service.list_plans(role)})
+                elif path.startswith("/api/plans/") and path.endswith("/reports"):
+                    plan_id = int(path.split("/")[3])
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, {"reports": service.list_plan_reports(plan_id, role)})
+                elif path.startswith("/api/plans/"):
+                    plan_id = int(path.rsplit("/", 1)[-1])
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, service.get_plan(plan_id, role))
                 else:
                     self._json(404, {"error": "not_found"})
             except Exception as exc:
@@ -119,6 +141,21 @@ def make_handler(service: Service, static_dir: str):
                     expected = body.get("expected_version")
                     self._json(200, service.transition(
                         item_id, target, expected, actor, role))
+                elif path == "/api/gates":
+                    self._json(201, service.create_gate(body, actor, role))
+                elif path.startswith("/api/gates/") and path.endswith("/windows"):
+                    gate_id = int(path.split("/")[3])
+                    self._json(201, service.add_gate_window(gate_id, body, actor, role))
+                elif path == "/api/safety-limits":
+                    self._json(201, service.create_safety_limit(body, actor, role))
+                elif path == "/api/plans":
+                    self._json(201, service.create_plan(body, actor, role))
+                elif path.startswith("/api/plans/") and path.endswith("/transition"):
+                    plan_id = int(path.split("/")[3])
+                    self._json(200, service.transition_plan(plan_id, body, actor, role))
+                elif path.startswith("/api/plans/") and path.endswith("/report"):
+                    plan_id = int(path.split("/")[3])
+                    self._json(200, service.report_execution(plan_id, body, actor, role))
                 else:
                     self._json(404, {"error": "not_found"})
             except Exception as exc:

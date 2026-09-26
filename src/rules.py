@@ -20,3 +20,11 @@ def validate_transition(current,target):
     if not can_transition(current,target): raise ConflictError(f"不能从{current}转换到{target}")
 def completion_blockers(target,open_records): return ["仍有未关闭事项"] if target in TERMINAL_STATES and open_records>0 else []
 def role_for_transition(target): return set(TRANSITION_ROLES.get(target,[]))
+# 调度方案状态机：待复核方案须总工写明取舍后才能授权；执行只能走回报接口
+PLAN_ENTITY='调度方案'; GATE_ENTITY='闸门'; SAFETY_ENTITY='下游安全流量'
+PLAN_STATES=['draft', 'pending_review', 'authorized', 'executed', 'closed']; PLAN_TRANSITIONS={'draft': ['authorized'], 'pending_review': ['authorized'], 'authorized': ['executed'], 'executed': ['closed'], 'closed': []}; PLAN_TRANSITION_ROLES={'authorized': ['chief_engineer'], 'executed': ['dispatcher'], 'closed': ['chief_engineer']}
+REGISTER_ROLES=set(['duty_officer', 'chief_engineer']); PLAN_CREATE_ROLES=set(['duty_officer']); REPORT_ROLES=set(['dispatcher'])
+def validate_plan_transition(current,target):
+    if current not in PLAN_STATES or target not in PLAN_STATES: raise ValidationError("未知方案状态")
+    if target not in PLAN_TRANSITIONS.get(current,[]): raise ConflictError(f"方案不能从{current}转换到{target}")
+def plan_role_for_transition(target): return set(PLAN_TRANSITION_ROLES.get(target,[]))
