@@ -1,18 +1,18 @@
 # 水库防汛调度与操作确认
 
-根据库位、入库流量、下游警戒和施工限制生成复核授权的泄洪指令。
+根据库位、入库流量、下游警戒和施工限制生成复核授权的泄洪指令。汛期支持登记各闸门可用时段与最大泄量，按洪峰到达时刻给出建议闸门组合、泄量和执行缺口；无闸可用或越过下游安全流量的方案留在待复核，由总工写明取舍后才能授权；调度员执行后回报实际开闸和泄量，系统按偏差调整下一轮建议。
 
 ## 模块结构
 
 - `app.py`：参数解析、依赖组装和HTTP服务启动。
 - `src/domain.py`：数据结构、错误、状态和基础校验。
-- `src/rules.py`：状态机、角色矩阵、优先级、期限和关闭不变量。
+- `src/rules.py`：状态机、角色矩阵、优先级、期限、关闭不变量，以及闸门可用性判定与组合分配。
 - `src/repository.py`：SQLite建表、事务、版本控制和审计链。
-- `src/service.py`：权限检查、用例编排、并发控制和审计。
+- `src/service.py`：权限检查、用例编排、并发控制、建议生成、授权门禁和审计。
 - `src/http_api.py`：JSON路由和统一错误响应。
 - `src/audit.py`：UTC时间和SHA-256审计事件。
 - `static/index.html`：最小演示页。
-- `tests/`：完整流程、规则和失败测试。
+- `tests/`：完整流程、规则、失败和闸门调度测试。
 
 ## 初始化与启动
 
@@ -26,13 +26,27 @@ python3 app.py --db ./data.db --port 8315
 
 - `GET /health`
 - `GET /api/items`
-- `POST /api/items`
+- `POST /api/items`，可登记`safety_flow`（下游安全流量）
 - `GET /api/items/{id}`
-- `POST /api/items/{id}/records`
+- `POST /api/items/{id}/records`，`kind=chief_rationale`的总工取舍记录仅总工可写
 - `POST /api/items/{id}/transition`，必须提交`expected_version`
+- `GET /api/gates`、`POST /api/gates`：登记闸门及最大泄量
+- `POST /api/gates/{id}/windows`：登记检修时段（洪峰落在窗口内则该闸不可用）
+- `POST /api/items/{id}/recommendations`：按洪峰到达时刻生成建议组合、泄量与缺口
+- `GET /api/items/{id}/recommendations`
+- `POST /api/items/{id}/reports`：执行后回报实际开闸与泄量（每轮建议仅接受一次回报）
+- `GET /api/items/{id}/reports`
 - `GET /api/audit`
 
 允许角色：duty_officer, chief_engineer, dispatcher, viewer。库位超过汛限或入库流量上升时提升紧迫度；授权前必须有复核记录，执行后仍要闭环现场反馈。
+
+## 调度规则
+
+- 建议泄量 = min(需求泄量 + 上轮偏差修正, 可用闸门泄量之和)，按闸门最大泄量降序分配组合。
+- 执行缺口 = 需求泄量超出可用总泄量的部分。
+- 洪峰到达时无闸可用，或建议泄量越过下游安全流量：方案留在待复核，`authorized`转换被拒绝，直到总工提交`chief_rationale`取舍记录。
+- 调度员在方案`executed`后回报实际开闸与泄量；偏差（建议−实际）计入下一轮建议的修正量。
+- 原有角色矩阵、`expected_version`乐观锁和SHA-256审计链保持不变。
 
 ## 测试
 

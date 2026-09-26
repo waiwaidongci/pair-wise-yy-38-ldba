@@ -20,3 +20,27 @@ def validate_transition(current,target):
     if not can_transition(current,target): raise ConflictError(f"不能从{current}转换到{target}")
 def completion_blockers(target,open_records): return ["仍有未关闭事项"] if target in TERMINAL_STATES and open_records>0 else []
 def role_for_transition(target): return set(TRANSITION_ROLES.get(target,[]))
+GATE_ROLES=set(['duty_officer']); RECOMMEND_ROLES=set(['duty_officer']); REPORT_ROLES=set(['dispatcher'])
+CHIEF_RATIONALE_KIND='chief_rationale'; CHIEF_RATIONALE_ROLES=set(['chief_engineer'])
+def parse_instant(value,field):
+    from datetime import datetime, timezone
+    if not isinstance(value,str) or not value.strip(): raise ValidationError(f"{field}不能为空")
+    text=value.strip()
+    if text.endswith('Z'): text=text[:-1]+'+00:00'
+    try: moment=datetime.fromisoformat(text)
+    except ValueError: raise ValidationError(f"{field}必须是ISO时间格式")
+    if moment.tzinfo is None: moment=moment.replace(tzinfo=timezone.utc)
+    return moment
+def gate_available(windows,peak):
+    for start,end in windows:
+        if start<=peak<end: return False
+    return True
+def allocate_gates(gates,target):
+    chosen=[]; remaining=max(0.0,float(target))
+    for gate in sorted(gates,key=lambda g:(-g["max_discharge"],g["id"])):
+        if remaining<=0: break
+        discharge=min(gate["max_discharge"],remaining)
+        if discharge>0:
+            chosen.append({"gate_id":gate["id"],"name":gate["name"],"discharge":round(discharge,3)})
+            remaining-=discharge
+    return chosen
